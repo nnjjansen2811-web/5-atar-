@@ -3,38 +3,166 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Clock</title>
+  <title>Image Board</title>
   <style>
     html, body {
       margin: 0;
       height: 100%;
       background: #ffffff;
-    }
-    body {
-      display: flex;
-      align-items: center;
-      justify-content: center;
       font-family: Arial, Helvetica, sans-serif;
+      overflow: hidden;
     }
-    #clock {
-      color: #808080;
-      font-size: 64px;
+    #toolbar {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      z-index: 1000;
     }
+    #toolbar label {
+      display: inline-block;
+      padding: 10px 16px;
+      background: #808080;
+      color: #ffffff;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    #toolbar input { display: none; }
+    #board {
+      position: absolute;
+      inset: 0;
+    }
+    .item {
+      position: absolute;
+      touch-action: none;
+      cursor: move;
+      user-select: none;
+    }
+    .item img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+    .item.selected { outline: 2px dashed #808080; }
+    .handle, .remove {
+      display: none;
+      position: absolute;
+      width: 24px;
+      height: 24px;
+      background: #808080;
+      color: #ffffff;
+      border-radius: 50%;
+      touch-action: none;
+      font-size: 16px;
+      line-height: 24px;
+      text-align: center;
+    }
+    .item.selected .handle, .item.selected .remove { display: block; }
+    .handle { right: -12px; bottom: -12px; cursor: nwse-resize; }
+    .remove { right: -12px; top: -12px; cursor: pointer; }
   </style>
 </head>
 <body>
-  <div id="clock"></div>
+  <div id="toolbar">
+    <label>Add picture<input type="file" id="fileInput" accept="image/*" multiple></label>
+  </div>
+  <div id="board"></div>
   <script>
-    function updateClock() {
-      document.getElementById("clock").textContent = new Date().toLocaleTimeString("en-US", {
-        hour: "numeric",
-        minute: "2-digit",
-        second: "2-digit",
-        hour12: true
-      });
+    const board = document.getElementById("board");
+    const fileInput = document.getElementById("fileInput");
+    let topZ = 1;
+
+    fileInput.addEventListener("change", () => {
+      for (const file of fileInput.files) {
+        addImage(URL.createObjectURL(file));
+      }
+      fileInput.value = "";
+    });
+
+    function select(item) {
+      document.querySelectorAll(".item.selected").forEach(el => el.classList.remove("selected"));
+      if (item) {
+        item.classList.add("selected");
+        item.style.zIndex = ++topZ;
+      }
     }
-    updateClock();
-    setInterval(updateClock, 1000);
+
+    board.addEventListener("pointerdown", e => {
+      if (e.target === board) select(null);
+    });
+
+    function addImage(src) {
+      const img = new Image();
+      img.onload = () => {
+        const maxWidth = Math.min(300, window.innerWidth * 0.6);
+        const width = Math.min(img.naturalWidth, maxWidth);
+        const height = width * img.naturalHeight / img.naturalWidth;
+
+        const item = document.createElement("div");
+        item.className = "item";
+        item.style.width = width + "px";
+        item.style.height = height + "px";
+        item.style.left = (window.innerWidth - width) / 2 + "px";
+        item.style.top = (window.innerHeight - height) / 2 + "px";
+
+        const handle = document.createElement("div");
+        handle.className = "handle";
+        const remove = document.createElement("div");
+        remove.className = "remove";
+        remove.textContent = "×";
+
+        item.append(img, handle, remove);
+        board.appendChild(item);
+        select(item);
+
+        const ratio = width / height;
+
+        // Drag to move
+        item.addEventListener("pointerdown", e => {
+          if (e.target !== item) return;
+          select(item);
+          const startX = e.clientX, startY = e.clientY;
+          const startLeft = item.offsetLeft, startTop = item.offsetTop;
+          item.setPointerCapture(e.pointerId);
+          const move = ev => {
+            item.style.left = startLeft + ev.clientX - startX + "px";
+            item.style.top = startTop + ev.clientY - startY + "px";
+          };
+          const up = () => {
+            item.removeEventListener("pointermove", move);
+            item.removeEventListener("pointerup", up);
+          };
+          item.addEventListener("pointermove", move);
+          item.addEventListener("pointerup", up);
+        });
+
+        // Drag corner to resize (keeps the picture's shape)
+        handle.addEventListener("pointerdown", e => {
+          e.stopPropagation();
+          const startX = e.clientX;
+          const startWidth = item.offsetWidth;
+          handle.setPointerCapture(e.pointerId);
+          const move = ev => {
+            const newWidth = Math.max(30, startWidth + ev.clientX - startX);
+            item.style.width = newWidth + "px";
+            item.style.height = newWidth / ratio + "px";
+          };
+          const up = () => {
+            handle.removeEventListener("pointermove", move);
+            handle.removeEventListener("pointerup", up);
+          };
+          handle.addEventListener("pointermove", move);
+          handle.addEventListener("pointerup", up);
+        });
+
+        remove.addEventListener("pointerdown", e => {
+          e.stopPropagation();
+          item.remove();
+        });
+      };
+      img.src = src;
+    }
   </script>
 </body>
 </html>
